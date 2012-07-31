@@ -1,10 +1,13 @@
 from cuisine import *
+from .util import default_to_local
 
 
+@default_to_local
 def vagrant_install():
-    ruby_install()
+    package_ensure('ruby')
+    package_ensure('rubygems')
+    sudo('gem install vagrant')
     virtualbox_install()
-    rvm_install_gem('vagrant', gemset='global')
 
 
 def virtualbox_install(package='virtualbox-4.1', os_version='precise'):

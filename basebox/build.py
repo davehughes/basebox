@@ -1,6 +1,7 @@
 import contextlib
 import urlparse
 
+from fabric.api import env, settings
 from fabric.colors import green, red
 from fabric.contrib import console
 from cuisine import *
@@ -96,7 +97,10 @@ def build_and_install_box(target,
     `force`     -- Force replacement if the target box is already installed
     '''
     temporary_box = None
-    installed_boxes = run('vagrant box list').splitlines()
+    with settings(warn_only=True):
+        output = run('vagrant box list')
+        installed_boxes = output.splitlines() if output.succeeded else []
+
     base_installed = basebox in installed_boxes
 
     if not base_installed:
