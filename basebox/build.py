@@ -6,6 +6,7 @@ from fabric.contrib import console
 from cuisine import *
 from peak.util.proxies import ObjectProxy
 from .vagrant import VagrantBox
+from .util import default_to_local
 
 
 class BaseBox(ObjectProxy):
@@ -43,6 +44,8 @@ class BaseBox(ObjectProxy):
     '''
     def __call__(self, *args, **kwargs):
         def wrap(func):
+
+            @default_to_local
             def wrapper(*a, **kw):
 
                 # If we're already in a nested build, don't rewrap
@@ -79,7 +82,7 @@ basebox = BaseBox(None)
 def build_and_install_box(target, 
                           basebox='http://files.vagrantup.com/precise64.box',
                           package_with_vagrantfile=False,
-                          force=False):
+                          force=True):
     '''
     Builds a Vagrant box based on `base`, executing buildfunc(*args, *kwargs)
     to configure it, then packages it and installs it as `target`.
