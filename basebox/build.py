@@ -2,6 +2,7 @@ import contextlib
 import urlparse
 
 from fabric.colors import green, red
+from fabric.contrib import console
 from cuisine import *
 from peak.util.proxies import ObjectProxy
 from .vagrant import VagrantBox
@@ -55,8 +56,13 @@ class BaseBox(ObjectProxy):
                 # Allow overrides in the functions keyword args also
                 name = readarg('name', func.func_name)
                 base = readarg('base', 'http://files.vagrantup.com/precise64.box')
+                package_with_vagrantfile = readarg('package_with_vagrantfile',
+                                                   False)
 
-                with build_and_install_box(name, basebox=base) as box:
+                with build_and_install_box(name,
+                    basebox=base,
+                    package_with_vagrantfile=package_with_vagrantfile
+                    ) as box:
                     self.__subject__ = box
                     return func(*a, **kw)
             return wrapper
@@ -72,6 +78,7 @@ basebox = BaseBox(None)
 @contextlib.contextmanager
 def build_and_install_box(target, 
                           basebox='http://files.vagrantup.com/precise64.box',
+                          package_with_vagrantfile=False,
                           force=False):
     '''
     Builds a Vagrant box based on `base`, executing buildfunc(*args, *kwargs)
@@ -115,6 +122,7 @@ def build_and_install_box(target,
         build_dir = run('mktemp -d')
         print green('Building box in temp directory: %s' % build_dir)
 
+        vagrant = None
         try:
             vagrantfile = '''
                 Vagrant::Config.run do |config|
@@ -126,7 +134,9 @@ def build_and_install_box(target,
             vagrant.rewrite_vagrantfile(vagrantfile)
             with vagrant.connect():
                 yield vagrant
-            vagrant.package(output='package.box')
+
+            vagrant.package(output='package.box',
+                            vagrantfile=package_with_vagrantfile)
         finally:
             if vagrant:
                 try:

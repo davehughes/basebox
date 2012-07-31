@@ -4,11 +4,12 @@ import copy
 import json
 import os
 import re
+import tempfile
 import types
 
 from fabric.api import *
 from fabric.colors import *
-from cuisine import run, file_exists
+from cuisine import run, file_exists, is_local, mode_remote, mode_local
 
 
 @contextlib.contextmanager
@@ -143,15 +144,43 @@ class VagrantContext(object):
                 vagrantfile=None):
         with self.execution_context():
             cmd = 'vagrant package %s' % (vm or '',)
-            if base:
-                cmd += ' --base %s' % base
-            if output:
-                cmd += ' --output %s' % output
-            if include:
-                cmd += ' --include %s' % ','.join("%s" % i for i in include),
-            if vagrantfile:
-                cmd += ' --vagrantfile %s' % vagrantfile
-            run(cmd)
+            tmpfile = None
+            try:
+                if base:
+                    cmd += ' --base %s' % base
+                if output:
+                    cmd += ' --output %s' % output
+                if include:
+                    cmd += ' --include %s' % ','.join("%s" % i for i in include),
+                if vagrantfile:
+                    if vagrantfile is True:
+                        # If vagrantfile == True, just use the current VagrantFile
+                        cmd += ' --vagrantfile %s' % os.path.join(self.directory, 'Vagrantfile')
+                    elif type(getattr(vagrantfile, 'read', None)) == types.FunctionType:
+                        # If  the specified vagrantfile appears to be a 
+                        # readable filelike, write it to a temp file and
+                        # add to the command.
+                        fd, tmpfile = tempfile.mkstemp()
+                        os.fdopen(fd, 'w').write(vagrantfile.read())
+                        cmd += ' --vagrantfile %s' % tmpfile
+                    elif type(vagrantfile) in types.StringTypes:
+                        if 'Vagrant::Config' in vagrantfile:
+                            # If this appears to be the string representation
+                            # of a Vagrantfile, write it to a temp file and 
+                            # add it to the command.
+                            fd, tmpfile = tempfile.mkstemp()
+                            os.fdopen(fd, 'w').write(vagrantfile)
+                            cmd += ' --vagrantfile %s' % tmpfile
+                            
+                        else:
+                            # Otherwise, treat it as a filename
+                            cmd += ' --vagrantfile %s' % vagrantfile
+
+                run(cmd)
+
+            finally:
+                if tmpfile:
+                    os.unlink(tmpfile)
 
     def resume(self, vm=None):
         with self.execution_context():
@@ -208,6 +237,7 @@ class VagrantContext(object):
 
     def rewrite_vagrantfile(self, contents, vm=None):
         open(os.path.join(self.directory, 'Vagrantfile'), 'w').write(contents)
+        # self.connect(vm=vm)
 
     def read_vagrantfile(self, vm=None):
         return open(os.path.join(self.directory, 'Vagrantfile')).read()
@@ -219,13 +249,14 @@ class _VagrantConnectionManager(object):
         overrides = context._connection_settings(vm=vm, **ssh_config_overrides)
         self.original_settings = dict(env)
         env.update(overrides)
+
         mode_remote()
 
     def __enter__(self, *args, **kwargs):
         pass
 
     def __exit__(self, *args, **kwargs):
-        # Clear the connection from cache - vagrant boxes are more transient
+        # Clear any cached connections - vagrant boxes are more transient
         # than other connections, and there are cases where caching connections
         # leads to mistakenly reusing stale connections.
         from fabric.state import connections
