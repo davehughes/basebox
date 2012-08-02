@@ -1,9 +1,13 @@
+import ssh
 import subprocess
+import time
 
 from fabric.api import env, settings
 from fabric.state import output
 from fabric.operations import (_shell_wrap, _prefix_commands, _prefix_env_vars,
     _sudo_prefix, _AttributeString)
+from fabric.io import output_loop
+from fabric.thread_handling import ThreadHandler
 
 import cuisine
 
@@ -113,10 +117,50 @@ def _execute_local(command, shell=True, combine_stderr=None):
     '''
     if combine_stderr is None:
         combine_stderr = env.combine_stderr
-
     stderr = subprocess.STDOUT if combine_stderr else subprocess.PIPE
 
     process = subprocess.Popen(command, shell=shell,
-                                stdout=subprocess.PIPE, stderr=stderr)
-    out, err = process.communicate()
-    return out.rstrip('\n'), err, process.returncode
+                               stdout=subprocess.PIPE,
+                               stderr=stderr)
+
+    # Create handlers to buffer and store output with fabric's output_loop()
+    capture_out, capture_err = [], []
+    channel = MockChannel(process.stdout, process.stderr)
+    workers = (
+        ThreadHandler('out', output_loop, channel, "recv", capture_out),
+        ThreadHandler('err', output_loop, channel, "recv_stderr", capture_err),
+    )
+
+    # Wait for process to finish, raising on any errors
+    while process.poll() is None:
+        for worker in workers:
+            e = worker.exception
+            if e:
+                raise e[0], e[1], e[2]
+        time.sleep(ssh.io_sleep)
+
+    # Join threads to make sure all output was read
+    for worker in workers:
+        worker.thread.join()
+
+    out = ''.join(capture_out).rstrip('\n')
+    err = ''.join(capture_err).rstrip('\n')
+    return out, err, process.returncode
+
+
+class MockChannel(object):
+    '''
+    Implement just enough of an interface so that we can act as an output
+    channel in fabric's output_loop() function.
+
+    Input is not implemented at this time.
+    '''
+    def __init__(self, stdout, stderr):
+        def reader(buf):
+            def recv(*args, **kwargs):
+                return buf.read(*args, **kwargs)
+            return recv if buf else lambda *a, **kw: ''
+
+        self.recv = reader(stdout)
+        self.recv_stderr = reader(stderr)
+        self.sendall = lambda *a, **kw: None  # no-op
