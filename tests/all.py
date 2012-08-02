@@ -6,7 +6,7 @@ some real caveats to running the tests:
 + The tests execute via a fabric connection (by default, to '$USER@localhost'),
   and this connection may request login credentials.
 + The tests will mostly only affect temporary files and directories, but will
-  also install Vagrant test boxes on the target machine.  These should be 
+  also install Vagrant test boxes.  These should be 
   automatically cleaned at the end of testing, but some manual cleanup may be
   necessary.
 + These tests take a terribly long time to run!  Since they involve bringing
@@ -19,12 +19,14 @@ import tempfile
 import unittest
 import uuid
 
-from basebox.vagrant import VagrantBox, VagrantContext, VirtualBox
+from basebox.vagrant import VagrantBox, VagrantContext
 from basebox.build import basebox
-from fabric.api import env, settings, run, sudo
+from fabric.api import env, settings
+from cuisine import mode_local, run, sudo
 
 TEST_BASE_BOX = 'basebox-test'
 TEST_BASE_BOX_URL = 'http://files.vagrantup.com/precise64.box'
+
 
 def ensure_test_base_box():
     with settings(warn_only=True):
@@ -180,4 +182,5 @@ class TestBaseBoxes(unittest.TestCase):
 
 if __name__ == "__main__":
     env.host_string = '%s@localhost' % os.environ['USER']
-    unittest.main()
+    with mode_local():
+        unittest.main()

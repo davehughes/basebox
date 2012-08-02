@@ -60,15 +60,18 @@ class BaseBox(ObjectProxy):
                 # Allow overrides in the functions keyword args also
                 name = readarg('name', func.func_name)
                 base = readarg('base', 'http://files.vagrantup.com/precise64.box')
-                package_with_vagrantfile = readarg('package_with_vagrantfile',
-                                                   False)
+                package_vagrantfile = readarg('package_vagrantfile', False)
 
-                with build_and_install_box(name,
-                    basebox=base,
-                    package_with_vagrantfile=package_with_vagrantfile
-                    ) as box:
+                # Create a temporary vagrant context, connect to it, and execute
+                # the context
+                with tempbox(basebox=base) as box:
                     self.__subject__ = box
-                    return func(*a, **kw)
+
+                    with box.connect():
+                        result = func(*a, **kw)
+                        box.package(vagrantfile=package_vagrantfile,
+                                    install_as=name)
+                        return result
             return wrapper
 
         if len(args) == 1 and callable(args[0]):
@@ -80,21 +83,15 @@ basebox = BaseBox(None)
 
 
 @contextlib.contextmanager
-def build_and_install_box(target, 
-                          basebox='http://files.vagrantup.com/precise64.box',
-                          package_with_vagrantfile=False,
-                          force=True):
+def tempbox(basebox='http://files.vagrantup.com/precise64.box'):
     '''
-    Builds a Vagrant box based on `base`, executing buildfunc(*args, *kwargs)
-    to configure it, then packages it and installs it as `target`.
+    Creates a temporary Vagrant box based on `base`, yielding a VagrantContext,
+    then cleans it up after the context executes.
 
-    `target`    -- Name for the installed box
     `basebox`   -- The base box to build the new box from.  May be one of:
                    + the name of a locally installed box
                    + the path to a local box file
                    + the URL of a remote box file
-
-    `force`     -- Force replacement if the target box is already installed
     '''
     temporary_box = None
     with settings(warn_only=True):
@@ -139,31 +136,13 @@ def build_and_install_box(target,
 
             vagrant = VagrantBox(build_dir)
             vagrant.rewrite_vagrantfile(vagrantfile)
-            with vagrant.connect():
-                yield vagrant
-
-            vagrant.package(output='package.box',
-                            vagrantfile=package_with_vagrantfile)
+            yield vagrant
         finally:
             if vagrant:
                 try:
                     vagrant.destroy(force=True)
                 except:
                     vagrant.virtualbox().unregister(delete=True)
-
-        # If the box needs to be replaced, prompt the user
-        if target in run('vagrant box list').splitlines():
-            if (not force and
-                not console.confirm(("A box named '%s' is already installed.  "
-                                    "Do you want to replace it?") % target,
-                                    default=False)):
-                abort(red('Aborting box installation'))
-            print red('Removing existing box: %s' % target)
-            run('vagrant box remove %s' % target)
-
-        print green('Installing box: %s' % target)
-        run('vagrant box add %s %s' %
-            (target, os.path.join(build_dir, 'package.box')))
     finally:
         if build_dir:
             print green('Cleaning build directory')

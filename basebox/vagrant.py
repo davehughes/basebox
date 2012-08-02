@@ -71,6 +71,7 @@ class VagrantContext(object):
         info['home'] = self.directory
         info['uuid'] = self.uuid(vm=vm)
         info['ip'] = self.ip(vm=vm)
+        info['vm'] = self.vminfo(vm=vm)
         return info
 
     def list_boxes(self):
@@ -125,14 +126,19 @@ class VagrantContext(object):
     def ssh_config(self, vm=None, host=None):
         with self.execution_context():
             # load info about the box to use as its context var
-            output = run('vagrant ssh-config %s' % (vm or '',))
+            with settings(warn_only=True):
+                output = run('vagrant ssh-config %s' % (vm or '',))
+                if output.failed:
+                    modes = run('ls -la /usr/local/jenkins/jobs/build-vagrant-boxes/workspace/credentials/fabric_rsa')
+                    abort(modes + self.read_vagrantfile() + output.stdout + output.stderr)
+
             ssh_info = output.splitlines()[1:]
             ssh_info = dict([l.strip().split(' ', 1)
                              for l in ssh_info if l.strip()])
             return {k.lower(): v for k, v in ssh_info.items()}
 
     def package(self, vm=None, base=None, output=None, include=None,
-                vagrantfile=None):
+                vagrantfile=None, install_as=None):
         with self.execution_context():
             cmd = 'vagrant package %s' % (vm or '',)
             tmpfile = None
@@ -168,6 +174,19 @@ class VagrantContext(object):
                             cmd += ' --vagrantfile %s' % vagrantfile
 
                 run(cmd)
+
+                # Install locally if a target is specified
+                if install_as:
+                    package_file = output or 'package.box'
+
+                    # Overwrite any existing box with the target name
+                    if install_as in run('vagrant box list').splitlines():
+                        print red('Removing existing box: %s' % install_as)
+                        run('vagrant box remove %s' % install_as)
+
+                    print green('Installing box: %s' % install_as)
+                    run('vagrant box add %s %s' %
+                        (install_as, os.path.join(self.directory, package_file)))
 
             finally:
                 if tmpfile:
@@ -234,13 +253,55 @@ class VagrantContext(object):
         return open(os.path.join(self.directory, 'Vagrantfile')).read()
 
 
+    # ----------------------------------------------------------------------
+    # Low-level interface to boxes - wraps the 'VBoxManage' shell command to 
+    # provide low-level control over virtual machines.
+    # ----------------------------------------------------------------------
+
+    def vminfo(self, vm=None, details=True):
+        '''
+        Parse showvminfo output into an attribute map.
+        '''
+        with self.execution_context():
+            result = run('VBoxManage showvminfo %s --machinereadable' %
+                         self.uuid(vm=vm))
+        infomap = {}
+        pattern = re.compile('^(?P<attribute>.+)=(?:\\"(?P<quoted>.+)\\"|(?P<unquoted>.+))$')
+
+        for line in result.splitlines():
+            m = pattern.match(line)
+            infomap[m.group('attribute')] = m.group('quoted') or m.group('unquoted')
+
+        return infomap
+
+    def unregister(self, vm=None, delete=False):
+        cmd = 'VBoxManage unregistervm %s' % self.uuid(vm=vm)
+        if delete:
+            cmd += ' --delete'
+        with self.execution_context():
+            result = run(cmd)
+            return result
+
+    def modify(self, vm=None, **options):
+        uuid = self.uuid(vm=vm)
+        opts = ['--%s %s' % (k, v) for k, v in options.iteritems()]
+        with self.execution_context():
+            cmd = 'VBoxManage modifyvm %s %s' % (uuid, ' '.join(opts))
+            run(cmd)
+
+    def control(self, command, paramstring=None, vm=None):
+        with self.execution_context():
+            cmd = ('VBoxManage controlvm %s %s %s' % 
+                    (self.uuid(vm=vm), command, paramstring or ''))
+            run(cmd)
+
+
 class _VagrantConnectionManager(object):
 
     def __init__(self, context, vm=None, **ssh_config_overrides):
         overrides = context._connection_settings(vm=vm, **ssh_config_overrides)
         self.original_settings = dict(env)
         env.update(overrides)
-
         mode_remote()
 
     def __enter__(self, *args, **kwargs):
@@ -251,66 +312,11 @@ class _VagrantConnectionManager(object):
         # than other connections, and there are cases where caching connections
         # leads to mistakenly reusing stale connections.
         from fabric.state import connections
-        del connections[env.host_string]
+        if env.host_string in connections:
+            del connections[env.host_string]
 
         env.clear()
         env.update(self.original_settings)
-
-
-def vagrant_environment(name, dir='vagrant'):
-    '''
-    Configure and load the named vagrant environment.
-    Usage (with config at ./vagrant/test/environment.json):
-
-        fab vagrant_environment:test [tasks in environment]
-
-    Conventions:
-    - Represent a cluster as a JSON file ('environment.json') in a directory
-      that can double as a Vagrant directory.
-    - Use the cluster spec to project a Vagrantfile and to assign roles to the
-      boxes.
-    - Load role -> host mappings to initialize fabric roledefs.
-
-    Example environment.json showing all currently supported keys:
-    {
-        "vms": {
-            "web": {                   # box name for vagrant
-                "box": "base",         # name or URL of installed base box
-                "ip": "192.168.1.10",  # address on host-only network
-                "roles": ["app", "redis", "cache"]  # fabric roles for this box
-            },
-            "db": {
-                "box": "base",
-                "ip": "192.168.1.11",
-                "roles": ["database", "solr"]
-            },
-            ... etc. ...
-        }
-    }
-    '''
-    env_dir = os.path.abspath(os.path.join(dir, name))
-    env_config = os.path.join(env_dir, 'environment.json')
-    if not file_exists(env_config):
-        abort(red('Could not load environment config: %s' % env_config))
-
-    # Load config and bring boxes up
-    config = json.loads(file_read(env_config))
-    file_render_template('vagrant/Vagrantfile',
-                         os.path.join(env_dir, 'Vagrantfile'),
-                         context=config)
-
-    env.roledefs = defaultdict(list, env.roledefs)
-    for name, vm in (config.get('vms') or {}).items():
-        env.hosts.append(vm['ip'])
-        for role in vm.get('roles') or []:
-            env.roledefs[role].append(vm['ip'])
-
-    with cd(env_dir):
-        run('vagrant up')
-
-    # register boxes by role
-    import environments
-    environments.shared()
 
 
 class VagrantBox(object):
@@ -325,40 +331,3 @@ class VagrantBox(object):
     def __getattr__(self, attr):
         f = getattr(self.context, attr)
         return lambda *a, **kw: f(*a, vm=self.box_name, **kw)
-
-
-class VirtualBox(object):
-    '''
-    Wraps the 'VBoxManage' shell command to provide low-level control over
-    virtual machines.
-    '''
-    def __init__(self, context):
-        self.context = context
-
-    def info(self, details=True):
-        '''
-        Parse showvminfo output into an attribute map.
-        '''
-        result = run('VBoxManage showvminfo %s --machinereadable' %
-                     self.context.uuid())
-        infomap = {}
-        pattern = re.compile('^(?P<attribute>.+)=(?:\\"(?P<quoted>.+)\\"|(?P<unquoted>.+))$')
-
-        for line in result.splitlines():
-            m = pattern.match(line)
-            infomap[m.group('attribute')] = m.group('quoted') or m.group('unquoted')
-
-        return result
-
-    def unregister(self, delete=False):
-        cmd = 'VBoxManage unregistervm %s' % self.context.uuid()
-        if delete:
-            cmd += ' --delete'
-        result = run(cmd)
-        return result
-
-    def modify(self, **options):
-        pass
-
-    def control(self):
-        pass
