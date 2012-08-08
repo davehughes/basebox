@@ -1,5 +1,4 @@
-#cuisine
--e git+git://github.com/sebastien/cuisine.git@4c2ab761cb7801beaf661d0631da10d7f663306a#egg=cuisine
+cuisine>=0.3.2
 fabric>=1.4
 proxytypes>=0.9
 
