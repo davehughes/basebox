@@ -64,7 +64,7 @@ class BaseBox(ObjectProxy):
                 # Allow overrides in the functions keyword args also
                 name = readarg('name', func.func_name)
                 base = readarg('base', 'http://files.vagrantup.com/precise64.box')
-                package_vagrantfile = readarg('package_vagrantfile', 
+                package_vagrantfile = readarg('package_vagrantfile',
                                               VFILE_COPY_FROM_BASE)
 
                 # Create a temporary vagrant context, connect to it, and execute
@@ -79,7 +79,7 @@ class BaseBox(ObjectProxy):
                         vfile = package_vagrantfile
                         if vfile == VFILE_COPY_FROM_BASE:
                             basefile = ('~/.vagrant.d/%s/include/_Vagrantfile'
-                                        % box.box_name)
+                                        % box.basebox)
                             vfile = basefile if file_exists(basefile) else None
                         elif package_vagrantfile == VFILE_USE_CURRENT:
                             vfile = os.path.join(box.directory, 'Vagrantfile')
@@ -153,7 +153,7 @@ def tempbox(base='http://files.vagrantup.com/precise64.box'):
 
             vagrant = VagrantBox(build_dir)
             vagrant.rewrite_vagrantfile(vagrantfile)
-            vagrant.box_name = box_name
+            vagrant.basebox = box_name
             yield vagrant
         finally:
             if vagrant:
