@@ -10,6 +10,10 @@ from .vagrant import VagrantBox
 from .util import default_to_local
 
 
+VFILE_NONE = 0
+VFILE_USE_CURRENT = 1
+VFILE_COPY_FROM_BASE = 2
+
 class BaseBox(ObjectProxy):
     '''
     Decorator class for functions that build base boxes.  For instance, the
@@ -60,17 +64,30 @@ class BaseBox(ObjectProxy):
                 # Allow overrides in the functions keyword args also
                 name = readarg('name', func.func_name)
                 base = readarg('base', 'http://files.vagrantup.com/precise64.box')
-                package_vagrantfile = readarg('package_vagrantfile', False)
+                package_vagrantfile = readarg('package_vagrantfile', 
+                                              VFILE_COPY_FROM_BASE)
 
                 # Create a temporary vagrant context, connect to it, and execute
                 # the context
-                with tempbox(basebox=base) as box:
+                with tempbox(base=base) as box:
                     self.__subject__ = box
 
                     with box.connect():
                         result = func(*a, **kw)
-                        box.package(vagrantfile=package_vagrantfile,
-                                    install_as=name)
+
+                        # Determine how to package the box
+                        vfile = package_vagrantfile
+                        if vfile == VFILE_COPY_FROM_BASE:
+                            basefile = ('~/.vagrant.d/%s/include/_Vagrantfile'
+                                        % box.box_name)
+                            vfile = basefile if file_exists(basefile) else None
+                        elif package_vagrantfile == VFILE_USE_CURRENT:
+                            vfile = os.path.join(box.directory, 'Vagrantfile')
+                        elif package_vagrantfile == VFILE_NONE:
+                            vfile = None
+
+                        box.package(vagrantfile=vfile, install_as=name)
+
                         return result
             return wrapper
 
@@ -83,12 +100,12 @@ basebox = BaseBox(None)
 
 
 @contextlib.contextmanager
-def tempbox(basebox='http://files.vagrantup.com/precise64.box'):
+def tempbox(base='http://files.vagrantup.com/precise64.box'):
     '''
     Creates a temporary Vagrant box based on `base`, yielding a VagrantContext,
     then cleans it up after the context executes.
 
-    `basebox`   -- The base box to build the new box from.  May be one of:
+    `base`   -- The base box to build the new box from.  May be one of:
                    + the name of a locally installed box
                    + the path to a local box file
                    + the URL of a remote box file
@@ -98,14 +115,14 @@ def tempbox(basebox='http://files.vagrantup.com/precise64.box'):
         output = run('vagrant box list')
         installed_boxes = output.splitlines() if output.succeeded else []
 
-    base_installed = basebox in installed_boxes
+    base_installed = base in installed_boxes
 
     if not base_installed:
         # install box temporarily
-        if file_exists(basebox):
-            basename = os.path.basename(os.path.splitext(basebox)[0])
+        if file_exists(base):
+            basename = os.path.basename(os.path.splitext(base)[0])
         else:  # treat as a url
-            path = urlparse.urlsplit(basebox).path
+            path = urlparse.urlsplit(base).path
             basename = os.path.basename(os.path.splitext(path)[0])
 
         # find a unique name
@@ -116,10 +133,10 @@ def tempbox(basebox='http://files.vagrantup.com/precise64.box'):
             box_name = '%s-%03i' % (basename, count)
 
         print green('Installing temporary box: %s' % box_name)
-        run('vagrant box add %s %s' % (box_name, basebox))
+        run('vagrant box add %s %s' % (box_name, base))
         temporary_box = box_name
     else:
-        box_name = basebox
+        box_name = base
 
     # In a temp directory, create, build, and package a basic box
     try:
@@ -136,6 +153,7 @@ def tempbox(basebox='http://files.vagrantup.com/precise64.box'):
 
             vagrant = VagrantBox(build_dir)
             vagrant.rewrite_vagrantfile(vagrantfile)
+            vagrant.box_name = box_name
             yield vagrant
         finally:
             if vagrant:

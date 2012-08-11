@@ -144,10 +144,7 @@ class VagrantContext(object):
                 if include:
                     cmd += ' --include %s' % ','.join("%s" % i for i in include),
                 if vagrantfile:
-                    if vagrantfile is True:
-                        # If vagrantfile == True, just use the current VagrantFile
-                        cmd += ' --vagrantfile %s' % os.path.join(self.directory, 'Vagrantfile')
-                    elif type(getattr(vagrantfile, 'read', None)) == types.FunctionType:
+                    if type(getattr(vagrantfile, 'read', None)) == types.FunctionType:
                         # If  the specified vagrantfile appears to be a 
                         # readable filelike, write it to a temp file and
                         # add to the command.
