@@ -30,12 +30,6 @@ class VagrantContext(object):
             with shell_env(VAGRANT_LOG=loglevel), self.execmode():
                 yield self
 
-    def virtualbox(self, vm=None):
-        if vm:
-            return VirtualBox(VagrantBox(vself, vm=vm))
-        else:
-            return VirtualBox(self)
-
     def uuid(self, vm=None):
         '''
         Determine the underlying VM's UUID, which is useful for purposes like

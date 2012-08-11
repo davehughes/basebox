@@ -5,12 +5,15 @@ from .util import default_to_local
 @default_to_local
 def vagrant_install():
     package_ensure('ruby')
+    package_ensure('ruby-dev')
     package_ensure('rubygems')
     sudo('gem install vagrant')
     virtualbox_install()
 
 
-def virtualbox_install(package='virtualbox-4.1', os_version='precise'):
+def virtualbox_install(package='virtualbox-4.1'):
+
+    os_version = run('lsb_release -sc')
 
     # Add Oracle's VirtualBox repository and key, and comment out the 'deb-src'
     # line, since they don't provide source.
@@ -22,6 +25,7 @@ def virtualbox_install(package='virtualbox-4.1', os_version='precise'):
         sig = file_sha256(vbox_list)
         file_update(vbox_list, lambda x: text_ensure_line(x, vbox_repo_line))
         if file_sha256(vbox_list) != sig:
+            package_ensure('curl')
             run('curl http://download.virtualbox.org/virtualbox/debian/oracle_vbox.asc | sudo apt-key add -')
             package_update()
 

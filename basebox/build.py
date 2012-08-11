@@ -142,7 +142,7 @@ def tempbox(basebox='http://files.vagrantup.com/precise64.box'):
                 try:
                     vagrant.destroy(force=True)
                 except:
-                    vagrant.virtualbox().unregister(delete=True)
+                    vagrant.unregister(delete=True)
     finally:
         if build_dir:
             print green('Cleaning build directory')
