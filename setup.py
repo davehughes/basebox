@@ -2,7 +2,7 @@
 import setuptools
 setuptools.setup(
     name='basebox',
-    version='0.1.1',
+    version='0.1.2',
     packages=setuptools.find_packages(),
     install_requires=['fabric', 'cuisine', 'proxytypes'],
     entry_points={

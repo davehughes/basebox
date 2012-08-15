@@ -62,10 +62,11 @@ class BaseBox(ObjectProxy):
                     return kw.pop(arg, kwargs.pop(arg, None)) or default
 
                 # Allow overrides in the functions keyword args also
-                name = readarg('name', func.func_name)
+                install_as = readarg('install_as', func.func_name)
                 base = readarg('base', 'http://files.vagrantup.com/precise64.box')
                 package_vagrantfile = readarg('package_vagrantfile',
                                               VFILE_COPY_FROM_BASE)
+                package_as = readarg('package_as')
 
                 # Create a temporary vagrant context, connect to it, and execute
                 # the context
@@ -86,7 +87,9 @@ class BaseBox(ObjectProxy):
                         elif package_vagrantfile == VFILE_NONE:
                             vfile = None
 
-                        box.package(vagrantfile=vfile, install_as=name)
+                        box.package(vagrantfile=vfile,
+                                    install_as=install_as,
+                                    output=package_as)
 
                         return result
             return wrapper
