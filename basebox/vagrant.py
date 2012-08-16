@@ -48,15 +48,25 @@ class VagrantContext(object):
     def ip(self, vm=None, iface=None):
         if not self._ip.get((vm, iface)):
             with self.connect(vm=vm):
-                # Pick up the first interface if none is specified
-                if not iface:
-                    firstline = run('ifconfig -s').splitlines()[1]
-                    iface = re.split('\s+', firstline)[0]
 
-                output = run('ifconfig %s' % iface)
-                m = re.search('inet addr:(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})',
-                              output)
-                self._ip[(vm, iface)] = m.group(1)
+                def get_ip(ifc):
+                    output = run('ifconfig %s' % ifc)
+                    m = re.search('inet addr:(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})',
+                                  output)
+                    return m.group(1)
+
+                # Pick up the first interface if none is specified
+                ip = None
+                if iface:
+                    ip = get_ip(iface)
+                else:
+                    for iface in run('ifconfig -s | cut -d" " -f 1 -').splitlines()[1:]:
+                        _ip = get_ip(iface)
+                        if _ip not in ['10.0.2.15', '127.0.0.1']:
+                            ip = _ip
+                            break
+
+                self._ip[(vm, iface)] = ip
         return self._ip.get((vm, iface))
 
     def info(self, vm=None):
