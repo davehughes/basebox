@@ -328,7 +328,7 @@ class VagrantBox(object):
             self.context = VagrantContext(context)
 
         # Strip boxname when dealing with the default box
-        if len(self.context.list_boxes()) == 1 and box_name == 'default':
+        if box_name == 'default':
             self.box_name = None
         else:
             self.box_name = box_name
