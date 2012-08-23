@@ -1,5 +1,6 @@
 import contextlib
 import urlparse
+from functools import wraps
 
 from fabric.api import env, settings
 from fabric.colors import green, red
@@ -50,6 +51,7 @@ class BaseBox(ObjectProxy):
     def __call__(self, *args, **kwargs):
         def wrap(func):
 
+            @wraps(func)
             @default_to_local
             def wrapper(*a, **kw):
 
