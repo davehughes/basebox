@@ -75,25 +75,27 @@ class BaseBox(ObjectProxy):
                 with tempbox(base=base) as box:
                     self.__subject__ = box
 
+                    # Connect to box and execute
                     with box.connect():
                         result = func(*a, **kw)
 
-                        # Determine how to package the box
-                        vfile = package_vagrantfile
-                        if vfile == VFILE_COPY_FROM_BASE:
-                            basefile = ('~/.vagrant.d/%s/include/_Vagrantfile'
-                                        % box.basebox)
-                            vfile = basefile if file_exists(basefile) else None
-                        elif package_vagrantfile == VFILE_USE_CURRENT:
-                            vfile = os.path.join(box.directory, 'Vagrantfile')
-                        elif package_vagrantfile == VFILE_NONE:
-                            vfile = None
+                    # Determine how to package the box
+                    vfile = package_vagrantfile
+                    if vfile == VFILE_COPY_FROM_BASE:
+                        basefile = ('$HOME/.vagrant.d/boxes/%s/include/_Vagrantfile'
+                                    % box.basebox)
+                        vfile = basefile if file_exists(basefile) else None
+                    elif package_vagrantfile == VFILE_USE_CURRENT:
+                        vfile = os.path.join(box.directory, 'Vagrantfile')
+                    elif package_vagrantfile == VFILE_NONE:
+                        vfile = None
 
-                        box.package(vagrantfile=vfile,
-                                    install_as=install_as,
-                                    output=package_as)
+                    box.package(vagrantfile=vfile,
+                                install_as=install_as,
+                                output=package_as)
 
-                        return result
+                    return result
+
             return wrapper
 
         if len(args) == 1 and callable(args[0]):
