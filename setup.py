@@ -6,6 +6,7 @@ execfile('basebox/version.py')
 
 setuptools.setup(
     name='basebox',
+    version=__version__,
     url='https://github.com/davehughes/basebox',
     author='David Hughes',
     author_email='d@vidhughes.com',
