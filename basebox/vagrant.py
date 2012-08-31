@@ -1,4 +1,3 @@
-from collections import defaultdict
 import contextlib
 import copy
 import json
@@ -11,6 +10,15 @@ from fabric.api import *
 from fabric.colors import *
 from cuisine import run, file_exists, is_local, mode_remote, mode_local
 from .util import shell_env
+
+
+def installed_boxes():
+
+    # Match lines like 'box-name (virtualbox)' with the parenthetical box type
+    # being optional (added in vagrant 1.1 dev version)
+    line_pattern = re.compile('^(?P<name>[^\s]+)(?:\s+\((?P<type>.*)\))?$')
+    return [re.match(line_pattern, line).group('name')
+            for line in run('vagrant box list').splitlines()]
 
 
 class VagrantContext(object):
@@ -155,7 +163,7 @@ class VagrantContext(object):
                     cmd += ' --include %s' % ','.join("%s" % i for i in include),
                 if vagrantfile:
                     if type(getattr(vagrantfile, 'read', None)) == types.FunctionType:
-                        # If  the specified vagrantfile appears to be a 
+                        # If  the specified vagrantfile appears to be a
                         # readable filelike, write it to a temp file and
                         # add to the command.
                         fd, tmpfile = tempfile.mkstemp()
@@ -164,12 +172,11 @@ class VagrantContext(object):
                     elif type(vagrantfile) in types.StringTypes:
                         if 'Vagrant::Config' in vagrantfile:
                             # If this appears to be the string representation
-                            # of a Vagrantfile, write it to a temp file and 
+                            # of a Vagrantfile, write it to a temp file and
                             # add it to the command.
                             fd, tmpfile = tempfile.mkstemp()
                             os.fdopen(fd, 'w').write(vagrantfile)
                             cmd += ' --vagrantfile %s' % tmpfile
-                            
                         else:
                             # Otherwise, treat it as a filename
                             cmd += ' --vagrantfile %s' % vagrantfile
@@ -181,7 +188,7 @@ class VagrantContext(object):
                     package_file = output or 'package.box'
 
                     # Overwrite any existing box with the target name
-                    if install_as in run('vagrant box list').splitlines():
+                    if install_as in installed_boxes():
                         print red('Removing existing box: %s' % install_as)
                         run('vagrant box remove %s' % install_as)
 
@@ -336,4 +343,7 @@ class VagrantBox(object):
     # Proxy methods to underlying context
     def __getattr__(self, attr):
         f = getattr(self.context, attr)
-        return lambda *a, **kw: f(*a, vm=self.box_name, **kw)
+        if attr in ['list_boxes']:
+            return f
+        else:
+            return lambda *a, **kw: f(*a, vm=self.box_name, **kw)

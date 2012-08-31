@@ -1,0 +1,15 @@
+# -*- mode: ruby -*-
+# vi: set ft=ruby :
+#
+
+Vagrant::Config.run do |config|
+    config.vm.box = "{{ box }}"
+    {% if box_url %}config.vm.box_url = "{{ box_url }}"{% endif %}
+
+    {% if ssh.username %}config.ssh.username = "{{ ssh.username }}"{% endif %}
+    {% if ssh.private_key_path %}config.ssh.private_key_path = "{{ ssh.private_key_path }}"{% endif %}
+    
+    {% for host in hosts -%}
+    config.vm.define :{{ host }}
+    {% endfor %}
+end
