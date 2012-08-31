@@ -182,7 +182,9 @@ def tempbox(base='http://files.vagrantup.com/precise64.box',
             vagrant = VagrantBox(build_dir)
 
             # Render the Vagrantfile template
-            vfile_template_context.update({'box': base.name, 'box_url': base.url})
+            vfile_template_context.update({'box': base.name,
+                                           'box_url': base.url,
+                                           'ssh': {}})
             vagrantfile = vfile_template.render(vfile_template_context)
             vagrant.rewrite_vagrantfile(vagrantfile)
 
