@@ -50,7 +50,8 @@ def resolve_package_vagrantfile(vfile, box):
             return file_read(vfile)
 
     if strategy == VFILE_COPY_FROM_BASE:
-        return file_read(get_inherited_vagrantfile(box.name))
+        f = get_inherited_vagrantfile(box.basebox)
+        return file_read(f) if f else None
     elif strategy == VFILE_USE_CURRENT:
         return file_read(os.path.join(box.directory, 'Vagrantfile'))
     elif strategy == VFILE_NONE:
@@ -59,8 +60,9 @@ def resolve_package_vagrantfile(vfile, box):
         raise ValueError('Unresolvable package vagrantfile: %s' % vfile)
 
 
-def get_inherited_vagrantfile(basebox, vagrant_home='$HOME'):
-    basefile = os.path.join(vagrant_home, '.vagrant.d/boxes', basebox, 'include/_Vagrantfile')
+def get_inherited_vagrantfile(basebox, vagrant_home=None):
+    vagrant_home = vagrant_home or os.environ.get('VAGRANT_HOME', '$HOME/.vagrant.d')
+    basefile = os.path.join(vagrant_home, 'boxes', basebox, 'include/_Vagrantfile')
     return basefile if file_exists(basefile) else None
 
 
