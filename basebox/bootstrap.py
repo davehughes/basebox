@@ -11,7 +11,7 @@ def vagrant_install():
     virtualbox_install()
 
 
-def virtualbox_install(package='virtualbox-4.1'):
+def virtualbox_install(package='virtualbox-4.2'):
 
     os_version = run('lsb_release -sc')
 
