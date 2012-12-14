@@ -1,4 +1,12 @@
-import ssh
+
+try:
+    from paramiko import io_sleep
+except ImportError:
+    try:
+        from ssh import io_sleep
+    except ImportError:
+        io_sleep = .01
+
 import subprocess
 import time
 
@@ -137,7 +145,7 @@ def _execute_local(command, shell=True, combine_stderr=None):
             e = worker.exception
             if e:
                 raise e[0], e[1], e[2]
-        time.sleep(ssh.io_sleep)
+        time.sleep(io_sleep)
 
     # Join threads to make sure all output was read
     for worker in workers:
