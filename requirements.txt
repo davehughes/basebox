@@ -1,4 +1,5 @@
 cuisine>=0.3.2
 fabric>=1.4
 proxytypes>=0.9
+ssh>=1.8
 
